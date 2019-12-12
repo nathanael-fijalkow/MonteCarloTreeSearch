@@ -185,21 +185,61 @@ class Competition(object):
         print("Results: %d plays, player 1 wins %.02f, player 2 wins %.02f" % (turns, player1_win / turns, player2_win / turns))
 
 ###################################
+# GENERIC PLAYER
+###################################
+
+class Player():
+    def __init__(self):
+        self.values = dict()
+        self.name = "Generic"
+
+    def play(self, state, verbose = False):
+        # Takes the state and returns the move to be applied.
+        if not state.hash in self.values:
+            if verbose:
+                print("The player had never seen that state!")
+            return random.choice(state.legal_plays())
+        else:
+            if verbose:
+                print("%s player's turn as player %d.\nCurrent value: %0.2f"  % (self.name, state.player, self.values[state.hash]))
+                print("Available moves and their values:")
+                if state.player == 1:
+                    print([((i,j),self.values[(state.next_state(i,j)).hash]) for (i,j) in state.legal_plays()
+                           if (state.next_state(i,j)).hash in self.values])
+                else:
+                    print([((i,j),self.values[(state.next_state(i,j)).hash]) for (i,j) in state.legal_plays()
+                           if (state.next_state(i,j)).hash in self.values])
+
+            # For more fun, we randomise over the most interesting moves.
+            if state.player == 1:
+                max_val = max([self.values[(state.next_state(i, j)).hash] for (i, j) in state.legal_plays()
+                               if (state.next_state(i, j)).hash in self.values])
+                interesting_moves = [(i, j) for (i, j) in state.legal_plays() if
+                                     self.values[(state.next_state(i, j)).hash] == max_val]
+            else:
+                min_val = min([self.values[(state.next_state(i, j)).hash] for (i, j) in state.legal_plays()
+                               if (state.next_state(i, j)).hash in self.values])
+                interesting_moves = [(i, j) for (i, j) in state.legal_plays() if
+                                     self.values[(state.next_state(i, j)).hash] == min_val]
+            return random.choice(interesting_moves)
+
+###################################
 # RANDOM PLAYER
 ###################################
 
-class Player_random(object):
-    def play(self, state, verbose = False):
-        # Takes the state and returns the move to be applied.
-        return random.choice(state.legal_plays())
+class Player_random(Player):
+    def __init__(self):
+        Player.__init__(self)
+        self.name = "Random"
 
 ###################################
 # OPTIMAL PLAYER (MIN MAX)
 ###################################
 
-class Player_optimal(object):
+class Player_optimal(Player):
     def __init__(self):
-        self.values = dict()
+        Player.__init__(self)
+        self.name = "Optimal"
 
     def solve(self, state = State()):
         # Computes the (exact) values recursively
@@ -223,34 +263,14 @@ class Player_optimal(object):
                     current_val = min(current_val,self.values[next.hash])
                 self.values[state.hash] = current_val
 
-    def play(self, state, verbose = False):
-        # Takes the state and returns the move to be applied.
-        if verbose:
-            print("Optimal player's turn as player %d.\nCurrent value: %0.2f"  % (state.player, self.values[state.hash]))
-            print("Interesting moves and their values:")
-            if state.player == 1:
-                print([((i,j),self.values[(state.next_state(i,j)).hash]) for (i,j) in state.legal_plays()
-                       if self.values[(state.next_state(i,j)).hash] >= self.values[state.hash]])
-            else:
-                print([((i, j), self.values[(state.next_state(i, j)).hash]) for (i, j) in state.legal_plays()
-                       if self.values[(state.next_state(i,j)).hash] <= self.values[state.hash]])
-
-        if state.player == 1:
-            max_val = max([self.values[(state.next_state(i,j)).hash] for (i,j) in state.legal_plays()])
-            interesting_moves = [(i,j) for (i,j) in state.legal_plays() if self.values[(state.next_state(i,j)).hash] == max_val]
-        else:
-            min_val = min([self.values[(state.next_state(i,j)).hash] for (i,j) in state.legal_plays()])
-            interesting_moves = [(i,j) for (i,j) in state.legal_plays() if self.values[(state.next_state(i,j)).hash] == min_val]
-        return random.choice(interesting_moves)
-
 ###################################
 # MONTE CARLO PLAYER
 ###################################
 
-class Player_MC(object):
+class Player_MC(Player):
     def __init__(self):
-        # For playing purposes
-        self.values = dict()
+        Player.__init__(self)
+        self.name = "Monte Carlo"
 
         # For training purposes
         self.epsilon = .1
@@ -261,32 +281,7 @@ class Player_MC(object):
         self.win = dict()
         self.loss = dict()
 
-    def play(self, state, verbose = False):
-        # Takes the state and returns the move to be applied.
-        if not state.hash in self.values:
-            if verbose:
-                print("Monte Carlo player's had never seen that state!")
-            return random.choice(state.legal_plays())
-        else:
-            if verbose:
-                print("Monte Carlo player's turn as player %d.\nCurrent value: %0.2f"  % (state.player, self.values[state.hash]))
-                print("Available moves and their values:")
-                if state.player == 1:
-                    print([((i,j),self.values[(state.next_state(i,j)).hash]) for (i,j) in state.legal_plays()
-                           if (state.next_state(i,j)).hash in self.values])
-                else:
-                    print([((i,j),self.values[(state.next_state(i,j)).hash]) for (i,j) in state.legal_plays()
-                           if (state.next_state(i,j)).hash in self.values])
-
-            possible_states = [((i,j), state.next_state(i,j)) for (i,j) in state.legal_plays()
-                               if (state.next_state(i,j)).hash in self.values]
-            if state.player == 1:
-                _, (i,j) = max((self.values[next.hash], (i,j)) for (i,j), next in possible_states)
-            else:
-                _, (i,j) = min((self.values[next.hash], (i,j)) for (i,j), next in possible_states)
-            return i,j
-
-    def play_during_training(self, state, t):
+    def play_during_training(self, state):
         # Takes the state and returns the move to be applied.
         if random.random() < self.epsilon:
             return random.choice(state.legal_plays())
@@ -312,7 +307,7 @@ class Player_MC(object):
             self.loss[state.hash] = 0
             self.values[state.hash] = 0
 
-    def run_simulation(self, t):
+    def run_simulation(self):
         state = State()
         state.hash = 0
         self.store_new_state(state)
@@ -323,7 +318,7 @@ class Player_MC(object):
 
         while not state.over:
             play.append(state.hash)
-            i, j = self.play_during_training(state,t)
+            i, j = self.play_during_training(state)
             state.update_state(i, j)
             self.store_new_state(state)
             self.plays[state.hash] += 1
@@ -339,7 +334,7 @@ class Player_MC(object):
         # Approximates the values through Monte Carlo simulation.
         t = 1
         while t <= number_simulations:
-            self.run_simulation(t)
+            self.run_simulation()
             if verbose and t % 100 == 0:
                 print("number of plays %d, number of wins %d, number of losses %d" % (self.plays[0], self.win[0], self.loss[0]))
                 print("value: %0.2f" % (1/2 * (self.plays[0] + self.win[0] - self.loss[0]) / self.plays[0]))
@@ -354,10 +349,10 @@ class Player_MC(object):
 # UCB PLAYER
 ###################################
 
-class Player_UCB(object):
+class Player_UCB(Player):
     def __init__(self):
-        # For playing purposes
-        self.values = dict()
+        Player.__init__(self)
+        self.name = "UCB"
 
         # For training purposes
         self.C = 1.4
@@ -368,32 +363,7 @@ class Player_UCB(object):
         self.win = dict()
         self.loss = dict()
 
-    def play(self, state, verbose = False):
-        # Takes the state and returns the move to be applied.
-        if not state.hash in self.values:
-            if verbose:
-                print("UCB player's had never seen that state!")
-            return random.choice(state.legal_plays())
-        else:
-            if verbose:
-                print("UCB player's turn as player %d.\nCurrent value: %0.2f"  % (state.player, self.values[state.hash]))
-                print("Available moves and their values:")
-                if state.player == 1:
-                    print([((i,j),self.values[(state.next_state(i,j)).hash]) for (i,j) in state.legal_plays()
-                           if (state.next_state(i,j)).hash in self.values])
-                else:
-                    print([((i,j),self.values[(state.next_state(i,j)).hash]) for (i,j) in state.legal_plays()
-                           if (state.next_state(i,j)).hash in self.values])
-
-            possible_states = [((i,j), state.next_state(i,j)) for (i,j) in state.legal_plays()
-                               if (state.next_state(i,j)).hash in self.values]
-            if state.player == 1:
-                _, (i,j) = max((self.values[next.hash], (i,j)) for (i,j), next in possible_states)
-            else:
-                _, (i,j) = min((self.values[next.hash], (i,j)) for (i,j), next in possible_states)
-            return i,j
-
-    def play_during_training(self, state, t):
+    def play_during_training(self, state):
         # Takes the state and returns the move to be applied.
         possible_states = [((i, j), state.next_state(i, j)) for (i, j) in state.legal_plays()]
         if all(next.hash in self.plays for ((i, j), next) in possible_states):
@@ -422,7 +392,7 @@ class Player_UCB(object):
             self.loss[state.hash] = 0
             self.values[state.hash] = 0
 
-    def run_simulation(self, t):
+    def run_simulation(self):
         state = State()
         state.hash = 0
         self.store_new_state(state)
@@ -433,7 +403,7 @@ class Player_UCB(object):
 
         while not state.over:
             play.append(state.hash)
-            i, j = self.play_during_training(state,t)
+            i, j = self.play_during_training(state)
             state.update_state(i, j)
             self.store_new_state(state)
             self.plays[state.hash] += 1
@@ -449,7 +419,7 @@ class Player_UCB(object):
         # Approximates the values through Monte Carlo simulation.
         t = 1
         while t <= number_simulations:
-            self.run_simulation(t)
+            self.run_simulation()
             if verbose and t % 100 == 0:
                 print("Number of plays %d, number of wins %d, number of losses %d" % (self.plays[0], self.win[0], self.loss[0]))
                 print("Value: %0.2f" % (1/2 * (self.plays[0] + self.win[0] - self.loss[0]) / self.plays[0]))
@@ -463,42 +433,14 @@ class Player_UCB(object):
 # TD PLAYER
 ###################################
 
-class Player_TD(object):
+class Player_TD(Player):
     def __init__(self):
-        # For playing purposes
-        self.values = dict()
+        Player.__init__(self)
+        self.name = "TD"
 
         # For training purposes
         self.step_size = 0.1
         self.epsilon = 0.1
-
-    def play(self, state, verbose=False):
-        # Takes the state and returns the move to be applied.
-        if not state.hash in self.values:
-            if verbose:
-                print("TD player's had never seen that state!")
-            return random.choice(state.legal_plays())
-        else:
-            if verbose:
-                print("TD player's turn as player %d.\nCurrent value: %0.2f" % (
-                    state.player, self.values[state.hash]))
-                print("Available moves and their values:")
-                if state.player == 1:
-                    print([((i, j), self.values[(state.next_state(i, j)).hash]) for (i, j) in
-                           state.legal_plays()
-                           if (state.next_state(i, j)).hash in self.values])
-                else:
-                    print([((i, j), self.values[(state.next_state(i, j)).hash]) for (i, j) in
-                           state.legal_plays()
-                           if (state.next_state(i, j)).hash in self.values])
-
-            possible_states = [((i, j), state.next_state(i, j)) for (i, j) in state.legal_plays()
-                               if (state.next_state(i, j)).hash in self.values]
-            if state.player == 1:
-                _, (i, j) = max((self.values[next.hash], (i, j)) for (i, j), next in possible_states)
-            else:
-                _, (i, j) = min((self.values[next.hash], (i, j)) for (i, j), next in possible_states)
-            return i, j
 
     def play_during_training(self, state):
         # Takes the state and returns the move to be applied.
@@ -524,7 +466,7 @@ class Player_TD(object):
         if not (state.hash in self.values):
             self.values[state.hash] = 0
 
-    def run_simulation(self, t):
+    def run_simulation(self):
         state = State()
         state.hash = 0
         self.store_new_state(state)
@@ -548,7 +490,7 @@ class Player_TD(object):
         # Approximates the values through Temporal Difference.
         t = 1
         while t <= number_simulations:
-            self.run_simulation(t)
+            self.run_simulation()
             if verbose and t % 100 == 0:
                 print("Value: %0.2f" % self.values[0])
             t += 1
@@ -569,8 +511,8 @@ competition = Competition()
 player_rand = Player_random()
 
 player_optimal = Player_optimal()
-# player_optimal.solve()
-# competition.save_values("optimal", player_optimal)
+#player_optimal.solve()
+#competition.save_values("optimal", player_optimal)
 competition.load_values("optimal", player_optimal)
 
 player_mc = Player_MC()
@@ -578,14 +520,20 @@ player_mc = Player_MC()
 #competition.save_values("MC_20000", player_mc)
 competition.load_values("MC_20000", player_mc)
 
-##### Comparing player_optimal and player_rand
-#competition.play(player_optimal, player_rand, verbose=True)
-#competition.compete(player_optimal, player_rand, 500)
+player_ucb = Player_UCB()
+#player_ucb.train(10000, True)
+#competition.save_values("UCB_10000", player_ucb)
+competition.load_values("UCB_10000", player_ucb)
 
-##### Comparing player_optimal and player_mc
+player_td = Player_TD()
+#player_td.train(2000, True)
+#competition.save_values("TD_2000", player_td)
+competition.load_values("TD_2000", player_td)
 
-#competition.play(player_mc, player_optimal, verbose=True)
-#competition.compete(player_mc, player_optimal, 500)
+competition.play(player_td, player_optimal, verbose=True)
+competition.compete(player_td, player_optimal, 500)
+
+
 
 #### How accurate is Player_mc's value function?
 #_, hash_val = max((abs(player_optimal.values[hash_val] - player_mc.values[hash_val]), hash_val) for hash_val in player_mc.plays)
@@ -609,18 +557,4 @@ competition.load_values("MC_20000", player_mc)
 #competition.play(player_mc1, player_mc2, verbose=True)
 #competition.compete(player_mc1, player_mc2, 500)
 
-##### Comparing player_optimal and player_ucb
-#player_ucb = Player_UCB()
-#player_ucb.train(10000)
-#competition.save_values("UCB_10000", player_ucb)
-#competition.load_values("UCB_10000", player_ucb)
-#competition.play(player_ucb, player_optimal, verbose=True)
-#competition.compete(player_ucb, player_optimal, 500)
-
-##### Comparing player_optimal and player_td
-player_td = Player_TD()
-player_td.train(2000, True)
-competition.save_values("TD_2000", player_td)
-#competition.load_values("UCB_10000", player_ucb)
-competition.play(player_td, player_optimal, verbose=True)
-competition.compete(player_td, player_optimal, 500)
+#print(len(player_optimal.values))
