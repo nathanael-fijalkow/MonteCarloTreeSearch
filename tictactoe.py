@@ -4,7 +4,6 @@ import numpy as np
 from math import log, sqrt
 
 SIZE = 3
-BOARD_SIZE = SIZE * SIZE
 
 class State(object):
     def __init__(self):
@@ -15,68 +14,64 @@ class State(object):
         self.data = np.zeros((SIZE, SIZE))
         # Player who's turn it is to play from this state
         self.player = 1
-        # self.outcome is the outcome of the game.
-        # The value of self.outcome does not matter as long as self.over is False
-        # A play won by player 1 has value 1
-        # A play won by player 2 has value 0
-        # A tie has value 0.5
-        self.outcome = 2
-        self.over = False
         self.hash = 0
+        # The outcome can be
+        # 1 if Player 1 wins
+        # 0 if Player 2 wins
+        # 0.5 if it's a tie
+        # -1 if the game is not over
+        # 2 if the outcome has never been computed
+        self.outcome = 2
 
     # checks whether the game is over from this state and who won
-    def is_over(self):
-        # checks rows
-        for i in range(0, SIZE):
-            if all(x == 1 for x in self.data[i, :]):
+    def compute_outcome(self):
+        if self.outcome != 2:
+            return self.outcome
+        else:
+            # checks rows
+            for i in range(0, SIZE):
+                if all(x == 1 for x in self.data[i, :]):
+                    self.outcome = 1
+                    return 1
+                if all(x == 2 for x in self.data[i, :]):
+                    self.outcome = 0
+                    return 0
+
+            # checks columns
+            for j in range(0, SIZE):
+                if all(x == 1 for x in self.data[:, j]):
+                    self.outcome = 1
+                    return 1
+                if all(x == 2 for x in self.data[:, j]):
+                    self.outcome = 0
+                    return 0
+
+            # checks diagonals
+            diag = [self.data[i,i] for i in range(0, SIZE)]
+            if all(x == 1 for x in diag):
                 self.outcome = 1
-                self.over = True
-                return True
-            if all(x == 2 for x in self.data[i, :]):
+                return 1
+            if all(x == 2 for x in diag):
                 self.outcome = 0
-                self.over = True
-                return True
+                return 0
 
-        # checks columns
-        for j in range(0, SIZE):
-            if all(x == 1 for x in self.data[:, j]):
+            anti_diag = [self.data[i,SIZE - 1 - i] for i in range(0, SIZE)]
+            if all(x == 1 for x in anti_diag):
                 self.outcome = 1
-                self.over = True
-                return True
-            if all(x == 2 for x in self.data[:, j]):
+                return 1
+            if all(x == 2 for x in anti_diag):
                 self.outcome = 0
-                self.over = True
-                return True
+                return 0
 
-        # checks diagonals
-        diag = [self.data[i,i] for i in range(0, SIZE)]
-        if all(x == 1 for x in diag):
-            self.outcome = 1
-            self.over = True
-            return True
-        if all(x == 2 for x in diag):
-            self.outcome = 0
-            self.over = True
-            return True
+            # check whether it's a tie
+            data_all = [self.data[i,j] for i in range(0, SIZE) for j in range(0, SIZE)]
+            if all(x != 0 for x in data_all):
+                self.outcome = 0.5
+                return 0.5
 
-        anti_diag = [self.data[i,SIZE - 1 - i] for i in range(0, SIZE)]
-        if all(x == 1 for x in anti_diag):
-            self.outcome = 1
-            self.over = True
-            return True
-        if all(x == 2 for x in anti_diag):
-            self.outcome = 0
-            self.over = True
-            return True
-
-        # check whether it's a tie
-        if (self.data.reshape(SIZE * SIZE) != 0).all():
-            self.outcome = 0.5
-            self.over = True
-            return True
-
-        # if we reached this point the game is still going on
-        self.over = False
+            # if we reached this point the game is still going on
+            self.outcome = -1
+            return -1
 
     # prints the board
     def print_state(self):
@@ -115,7 +110,6 @@ class State(object):
         new_state = State()
         new_state.data = np.copy(self.data)
         new_state.data[i, j] = self.player
-        new_state.is_over()
         new_state.hash = self.hash + 3 ** (SIZE * i + j) * self.player
         new_state.player = 3 - self.player
         return new_state
@@ -125,7 +119,7 @@ class State(object):
         self.data[i, j] = self.player
         self.hash = self.hash + 3 ** (SIZE * i + j) * self.player
         self.player = 3 - self.player
-        self.is_over()
+        self.outcome = 2
 
 ###################################
 # COMPETITION
@@ -143,11 +137,14 @@ class Competition(object):
             player.values = pickle.load(f)
 
     def play(self, player1, player2, verbose=False):
-        # Takes two strategies (one for each player), play them against each other once and declare a outcome
+        # Takes two strategies (one for each player), play them against each other once and declare an outcome
         state = State()
         state.hash = 0
 
-        while(not state.over):
+        if verbose:
+            print("Match between Player %s (as Player 1) and Player %s (as Player 2)" % (player1.name, player2.name)) 
+
+        while(state.compute_outcome() == -1):
             if verbose:
                 state.print_state()
             if state.player == 1:
@@ -166,23 +163,32 @@ class Competition(object):
             state.print_state()
             if state.outcome == 1:
                 print("Player 1 won")
-            if state.outcome == 0:
+            elif state.outcome == 0:
                 print("Player 2 won")
-            if state.outcome == 0.5:
+            else:
                 print("It's a tie!")
         return state.outcome
 
-    def compete(self, player1, player2, turns):
-        # Takes two strategies (one for each player) and play them against each other to compute statistics
+    def compete(self, player1, player2, games = 500):
+        # Takes two strategies (one for each player) and play them against each other a number of times
         player1_win = 0.0
         player2_win = 0.0
-        for _ in range(turns):
+        for _ in range(games):
             outcome = self.play(player1,player2)
             if outcome == 1:
                 player1_win += 1
             if outcome == 0:
                 player2_win += 1
-        print("Results: %d plays, player 1 wins %.02f, player 2 wins %.02f" % (turns, player1_win / turns, player2_win / turns))
+        print("Competition results: %d plays, player 1 wins %.02f, player 2 wins %.02f" % (games, player1_win / games, player2_win / games))
+
+    def ensures_tie(self, player1, player2, games = 50):
+        # Checks whether player1 ensures ties against player2 over a number of games
+        i = 0
+        while i < games:
+            if self.play(player1,player2) == 0:
+                return i
+            i += 1
+        return games
 
 ###################################
 # GENERIC PLAYER
@@ -201,7 +207,7 @@ class Player():
             return random.choice(state.legal_plays())
         else:
             if verbose:
-                print("%s player's turn as player %d.\nCurrent value: %0.2f"  % (self.name, state.player, self.values[state.hash]))
+                print("%s player's turn as player %d.\nCurrent value: %0.5f"  % (self.name, state.player, self.values[state.hash]))
                 print("Available moves and their values:")
                 if state.player == 1:
                     print([((i,j),self.values[(state.next_state(i,j)).hash]) for (i,j) in state.legal_plays()
@@ -212,15 +218,13 @@ class Player():
 
             # For more fun, we randomise over the most interesting moves.
             if state.player == 1:
-                max_val = max([self.values[(state.next_state(i, j)).hash] for (i, j) in state.legal_plays()
-                               if (state.next_state(i, j)).hash in self.values])
-                interesting_moves = [(i, j) for (i, j) in state.legal_plays() if
-                                     self.values[(state.next_state(i, j)).hash] == max_val]
+                evaluated_moves = [(self.values[(state.next_state(i, j)).hash], (i,j)) for (i, j) in state.legal_plays() if (state.next_state(i, j)).hash in self.values]
+                max_val, _ = max(evaluated_moves)
+                interesting_moves = [(i, j) for (v,(i, j)) in evaluated_moves if v == max_val]
             else:
-                min_val = min([self.values[(state.next_state(i, j)).hash] for (i, j) in state.legal_plays()
-                               if (state.next_state(i, j)).hash in self.values])
-                interesting_moves = [(i, j) for (i, j) in state.legal_plays() if
-                                     self.values[(state.next_state(i, j)).hash] == min_val]
+                evaluated_moves = [(self.values[(state.next_state(i, j)).hash], (i,j)) for (i, j) in state.legal_plays() if (state.next_state(i, j)).hash in self.values]
+                min_val, _ = min(evaluated_moves)
+                interesting_moves = [(i, j) for (v,(i, j)) in evaluated_moves if v == min_val]
             return random.choice(interesting_moves)
 
 ###################################
@@ -243,7 +247,7 @@ class Player_optimal(Player):
 
     def solve(self, state = State()):
         # Computes the (exact) values recursively
-        if state.over:
+        if state.compute_outcome() != -1:
             self.values[state.hash] = state.outcome
         else:
             if state.player == 1:
@@ -268,18 +272,18 @@ class Player_optimal(Player):
 ###################################
 
 class Player_MC(Player):
-    def __init__(self):
+    def __init__(self, epsilon = 0.1):
         Player.__init__(self)
         self.name = "Monte Carlo"
 
         # For training purposes
-        self.epsilon = .1
+        self.epsilon = epsilon
 
         # plays counts for each state how many plays included this state
         self.plays = dict()
-        # win and loss counts for each state the number of plays won or lost.
-        self.win = dict()
-        self.loss = dict()
+
+        # values_normalised is values multiplied by plays, which is easier to maintain. The values are only computed at the end 
+        self.values_normalised = dict()
 
     def play_during_training(self, state):
         # Takes the state and returns the move to be applied.
@@ -290,22 +294,20 @@ class Player_MC(Player):
             if all(next.hash in self.plays for ((i, j), next) in possible_states):
                 # If we have seen all of the legal moves at least once, we use the UCB bound.
                 if state.player == 1:
-                    _, (i, j) = max(((self.win[next.hash] - self.loss[next.hash]) / self.plays[next.hash], (i, j)) for ((i, j), next) in possible_states)
+                    _, (i, j) = max((self.values_normalised[next.hash] / self.plays[next.hash], (i, j)) for ((i, j), next) in possible_states)
                 else:
-                    _, (i, j) = min(((self.win[next.hash] - self.loss[next.hash]) / self.plays[next.hash], (i, j)) for ((i, j), next) in possible_states)
+                    _, (i, j) = min((self.values_normalised[next.hash] / self.plays[next.hash], (i, j)) for ((i, j), next) in possible_states)
             else:
                 # Otherwise choose randomly among unevaluated moves
-                unevaluated_moves = [(i, j) for (i, j) in state.legal_plays() if
-                                     not (state.next_state(i, j)).hash in self.plays]
+                unevaluated_moves = [(i, j) for (i, j) in state.legal_plays() if not (state.next_state(i, j)).hash in self.plays]
                 (i, j) = random.choice(unevaluated_moves)
             return i,j
 
     def store_new_state(self, state):
         if not(state.hash in self.plays):
             self.plays[state.hash] = 0
-            self.win[state.hash] = 0
-            self.loss[state.hash] = 0
             self.values[state.hash] = 0
+            self.values_normalised[state.hash] = 0
 
     def run_simulation(self):
         state = State()
@@ -316,33 +318,31 @@ class Player_MC(Player):
         # We store the play in a sequence
         play = []
 
-        while not state.over:
+        while (state.compute_outcome() == -1):
             play.append(state.hash)
             i, j = self.play_during_training(state)
             state.update_state(i, j)
             self.store_new_state(state)
             self.plays[state.hash] += 1
 
-        if state.outcome == 1:
-            for hash_val in play:
-                self.win[hash_val] += 1
-        if state.outcome == 0:
-            for hash_val in play:
-                self.loss[hash_val] += 1
+        self.values_normalised[state.hash] += state.outcome
+        for hash_val in play:
+            self.values_normalised[hash_val] += state.outcome
 
     def train(self, number_simulations, verbose = False):
         # Approximates the values through Monte Carlo simulation.
+        if verbose:
+            print("Start training of Player %s" % self.name)
         t = 1
         while t <= number_simulations:
             self.run_simulation()
             if verbose and t % 100 == 0:
-                print("number of plays %d, number of wins %d, number of losses %d" % (self.plays[0], self.win[0], self.loss[0]))
-                print("value: %0.2f" % (1/2 * (self.plays[0] + self.win[0] - self.loss[0]) / self.plays[0]))
+                print("After %d iterations the value of the initial state is %0.5f" % (t, (self.values_normalised[0] / self.plays[0])))
             t += 1
 
         # Update the values.
         for hash_val in self.plays:
-            self.values[hash_val] = 1/2 * (self.plays[hash_val] + self.win[hash_val] - self.loss[hash_val]) / self.plays[hash_val]
+            self.values[hash_val] = self.values_normalised[hash_val] / self.plays[hash_val]
 
 
 ###################################
@@ -350,18 +350,18 @@ class Player_MC(Player):
 ###################################
 
 class Player_UCB(Player):
-    def __init__(self):
+    def __init__(self, C = 1.4):
         Player.__init__(self)
         self.name = "UCB"
 
         # For training purposes
-        self.C = 1.4
+        self.C = C
 
         # plays counts for each state how many plays included this state
         self.plays = dict()
-        # win and loss counts for each state the number of plays won or lost.
-        self.win = dict()
-        self.loss = dict()
+
+        # values_normalised is values multiplied by plays, which is easier to maintain. The values are only computed at the end 
+        self.values_normalised = dict()
 
     def play_during_training(self, state):
         # Takes the state and returns the move to be applied.
@@ -370,83 +370,78 @@ class Player_UCB(Player):
             # If we have seen all of the legal moves at least once, we use the UCB bound.
             if state.player == 1:
                 _, (i, j) = max(
-                    (self.win[next.hash] / self.plays[next.hash] +
+                    (self.values_normalised[next.hash] / self.plays[next.hash] +
                      self.C * sqrt(log(self.plays[state.hash]) / self.plays[next.hash]), (i, j))
                     for ((i, j), next) in possible_states)
             else:
                 _, (i, j) = min(
-                    (self.win[next.hash] / self.plays[next.hash] +
+                    (self.values_normalised[next.hash] / self.plays[next.hash] -
                      self.C * sqrt(log(self.plays[state.hash]) / self.plays[next.hash]), (i, j))
                     for ((i, j), next) in possible_states)
         else:
             # Otherwise choose randomly among unevaluated moves
-            unevaluated_moves = [(i, j) for (i, j) in state.legal_plays() if
-                                 not (state.next_state(i, j)).hash in self.plays]
+            unevaluated_moves = [(i, j) for (i, j) in state.legal_plays() if not (state.next_state(i, j)).hash in self.plays]
             (i, j) = random.choice(unevaluated_moves)
         return i,j
 
     def store_new_state(self, state):
         if not(state.hash in self.plays):
             self.plays[state.hash] = 0
-            self.win[state.hash] = 0
-            self.loss[state.hash] = 0
             self.values[state.hash] = 0
+            self.values_normalised[state.hash] = 0
 
     def run_simulation(self):
         state = State()
-        state.hash = 0
         self.store_new_state(state)
         self.plays[state.hash] += 1
 
         # We store the play in a sequence
         play = []
 
-        while not state.over:
+        while(state.compute_outcome() == -1):
             play.append(state.hash)
             i, j = self.play_during_training(state)
             state.update_state(i, j)
             self.store_new_state(state)
             self.plays[state.hash] += 1
 
-        if state.outcome == 1:
-            for hash_val in play:
-                self.win[hash_val] += 1
-        if state.outcome == 0:
-            for hash_val in play:
-                self.loss[hash_val] += 1
+        self.values_normalised[state.hash] += state.outcome
+        for hash_val in play:
+            self.values_normalised[hash_val] += state.outcome
 
     def train(self, number_simulations, verbose = False):
         # Approximates the values through Monte Carlo simulation.
+        if verbose:
+            print("Start training of Player %s" % self.name)
         t = 1
         while t <= number_simulations:
             self.run_simulation()
             if verbose and t % 100 == 0:
-                print("Number of plays %d, number of wins %d, number of losses %d" % (self.plays[0], self.win[0], self.loss[0]))
-                print("Value: %0.2f" % (1/2 * (self.plays[0] + self.win[0] - self.loss[0]) / self.plays[0]))
+                print("After %d iterations the value of the initial state is %0.5f" % (t, self.values_normalised[0] / self.plays[0]))
             t += 1
 
         # Update the values.
         for hash_val in self.plays:
-            self.values[hash_val] = 1/2 * (self.plays[hash_val] + self.win[hash_val] - self.loss[hash_val]) / self.plays[hash_val]
+            self.values[hash_val] = self.values_normalised[hash_val] / self.plays[hash_val]
 
 ###################################
 # TD PLAYER
 ###################################
 
 class Player_TD(Player):
-    def __init__(self):
+    def __init__(self, step_size = 0.2, epsilon = 0.1):
         Player.__init__(self)
         self.name = "TD"
 
         # For training purposes
-        self.step_size = 0.1
-        self.epsilon = 0.1
+        self.step_size = step_size
+        self.epsilon = epsilon
 
-    def play_during_training(self, state):
+    def play_during_training(self, state, t):
         # Takes the state and returns the move to be applied.
         # The boolean says whether the move was random (False) or greedy (True)
-        if random.random() < self.epsilon:
-            return (False,random.choice(state.legal_plays()))
+        if random.random() < self.epsilon / (t ** 0.5):
+            return random.choice(state.legal_plays())
         else:
             possible_states = [((i, j), state.next_state(i, j)) for (i, j) in state.legal_plays()]
             if all(next.hash in self.values for ((i, j), next) in possible_states):
@@ -460,39 +455,40 @@ class Player_TD(Player):
                 unevaluated_moves = [(i, j) for (i, j) in state.legal_plays() if
                                      not (state.next_state(i, j)).hash in self.values]
                 (i, j) = random.choice(unevaluated_moves)
-            return (True,(i, j))
+            return (i, j)
 
     def store_new_state(self, state):
         if not (state.hash in self.values):
             self.values[state.hash] = 0
 
-    def run_simulation(self):
+    def run_simulation(self, t):
         state = State()
-        state.hash = 0
         self.store_new_state(state)
 
         play = []
-        while not state.over:
-            greedy, (i, j) = self.play_during_training(state)
-            play.append((state.hash,greedy))
+        while (state.compute_outcome() == -1):
+            (i, j) = self.play_during_training(state, t)
+            play.append(state.hash)
             state.update_state(i, j)
-            new_hash_val = state.hash
             self.store_new_state(state)
 
-        next_hash_val,_ = play[-1]
+        next_hash_val = state.hash
         self.values[next_hash_val] = state.outcome
-        for (hash_val,greedy) in reversed(play[:-1]):
-            if greedy:
-                td_error = self.values[next_hash_val] - self.values[hash_val]
-                self.values[hash_val] += self.step_size * td_error
+        for (hash_val) in reversed(play):
+            td_error = self.values[next_hash_val] - self.values[hash_val]
+            self.values[hash_val] += self.step_size * td_error
+            next_hash_val = hash_val
+
 
     def train(self, number_simulations, verbose=False):
         # Approximates the values through Temporal Difference.
+        if verbose:
+            print("Start training of Player %s" % self.name)
         t = 1
         while t <= number_simulations:
-            self.run_simulation()
-            if verbose and t % 100 == 0:
-                print("Value: %0.2f" % self.values[0])
+            self.run_simulation(t)
+            if verbose and t % 500 == 0:
+                print("After %d iterations the value of the initial state is %0.5f" % (t, self.values[0]))
             t += 1
 
 ###################################
@@ -515,46 +511,116 @@ player_optimal = Player_optimal()
 #competition.save_values("optimal", player_optimal)
 competition.load_values("optimal", player_optimal)
 
+################################################
+# Print the number of reachable states
+################################################
+
+#print("Number of reachable states: %d" % len(player_optimal.values))
+
 player_mc = Player_MC()
+player_ucb = Player_UCB()
+player_td = Player_TD()
+
+################################################
+# Playing the different algorithms against the optimal player
+################################################
+
 #player_mc.train(20000, True)
 #competition.save_values("MC_20000", player_mc)
-competition.load_values("MC_20000", player_mc)
+#competition.load_values("MC_20000", player_mc)
+#competition.play(player_mc,player_optimal,True)
+#competition.compete(player_mc,player_optimal)
 
-player_ucb = Player_UCB()
 #player_ucb.train(10000, True)
 #competition.save_values("UCB_10000", player_ucb)
-competition.load_values("UCB_10000", player_ucb)
+#competition.load_values("UCB_10000", player_ucb)
+#competition.play(player_ucb,player_optimal,True)
+#competition.compete(player_ucb,player_optimal)
 
-player_td = Player_TD()
-#player_td.train(2000, True)
+#player_td.train(20000, True)
 #competition.save_values("TD_2000", player_td)
-competition.load_values("TD_2000", player_td)
+#competition.load_values("TD_2000", player_td)
+#competition.play(player_td,player_optimal,True)
+#competition.compete(player_td,player_optimal)
 
-competition.play(player_td, player_optimal, verbose=True)
-competition.compete(player_td, player_optimal, 500)
+################################################
+# How many iterations to ensure a tie against the optimal player?
+################################################
 
+def how_many_iterations(player,steps = 100, games = 500, verbose = False):
+    iteration = 0
+    while(True):
+        player.train(steps)
+        iteration += steps
+        result = competition.ensures_tie(player,player_optimal,games)
+        if result == games:
+            return(iteration)
+        elif(verbose):
+            print("After %d iterations, Player %s lost the match number %d" % (iteration, player.name, result))
 
+#print(how_many_iterations(player_mc, steps = 100, games = 50, verbose = True))
+#print(how_many_iterations(player_ucb, steps = 100, games = 50, verbose = True))
+#print(how_many_iterations(player_td, steps = 100, games = 50, verbose = True))
 
-#### How accurate is Player_mc's value function?
-#_, hash_val = max((abs(player_optimal.values[hash_val] - player_mc.values[hash_val]), hash_val) for hash_val in player_mc.plays)
-#print("How bad is player_mc? Here is the state where they disagree the most:")
-#State.print_state(unhash(hash_val))
-#print("The optimal value is %0.2f, the value according to player_mc is %0.2f, over a sample of %d plays" %
-#(player_optimal.values[hash_val], player_mc.values[hash_val], player_mc.plays[hash_val]))
+################################################
+# Parameter tuning 
+################################################
 
-##### Comparing player_mc together
-#player_mc1 = Player_MC()
-#player_mc2 = Player_MC()
+import matplotlib
+import matplotlib.pyplot as plt
+from matplotlib.ticker import FormatStrFormatter
 
-#player_mc1.train(1000)
-#player_mc2.train(20000)
-#competition.save_values("MC_1000", player_mc1)
-#competition.save_values("MC_20000", player_mc2)
+def run_statistics_mc(parameter_list, number_tests, steps, games):
+    out = [[] for i in range(len(parameter_list))]
+    for index,parameter in enumerate(parameter_list):
+        for i in range(number_tests):
+            player_mc = Player_MC(epsilon=parameter)
+            out[index].append(how_many_iterations(player_mc,steps,games,verbose=False))
+    with open('statistics_MC.bin', 'wb') as f:
+        pickle.dump(out, f)
+    return(out)
 
-#competition.load_values("MC_5000", player_mc1)
-#competition.load_values("MC_20000", player_mc2)
+parameter_list_mc = [(i+4) / 20 for i in range(10)]
+#run_statistics_mc(parameter_list_mc, number_tests = 20, steps = 500, games = 50)
 
-#competition.play(player_mc1, player_mc2, verbose=True)
-#competition.compete(player_mc1, player_mc2, 500)
+def run_statistics_ucb(parameter_list, number_tests, steps, games):
+    out = [[] for i in range(len(parameter_list))]
+    for index,parameter in enumerate(parameter_list):
+        for i in range(number_tests):
+            player_ucb = Player_UCB(C=parameter)
+            out[index].append(how_many_iterations(player_ucb,steps,games,verbose=False))
+    with open('statistics_UCB.bin', 'wb') as f:
+        pickle.dump(out, f)
+    return(out)
 
-#print(len(player_optimal.values))
+parameter_list_ucb = [.8 + (i+1) / 10 for i in range(10)]
+#run_statistics_ucb(parameter_list_ucb, number_tests = 20, steps = 1000, games = 50)
+
+def run_statistics_td(parameter_list, number_tests, steps, games):
+    out = [[] for i in range(len(parameter_list))]
+    for index,parameter in enumerate(parameter_list):
+        for i in range(number_tests):
+            player_td = Player_TD(step_size=parameter[0],epsilon=parameter[1])
+            out[index].append(how_many_iterations(player_td,steps,games,verbose=False))
+    with open('statistics_TD.bin', 'wb') as f:
+        pickle.dump(out, f)
+    return(out)
+
+parameter_list_td = [(0.4 + i/10, (j+4) / 20) for i in range(3) for j in range(3)]
+#run_statistics_td(parameter_list = parameter_list_td, number_tests = 20, steps = 100, games = 50)
+
+def print_statistics(name_file, parameter_list, name_parameters):
+    with open('%s.bin' % name_file, 'rb') as f:
+        out = pickle.load(f)
+    fig, ax = plt.subplots()
+    ax.violinplot(out)
+    ax.set_xticklabels(parameter_list)
+    ax.set_xlabel("Parameter: %s" %name_parameters)
+    ax.set_ylabel("Number of iterations")
+    plt.savefig('%s.png' % name_file)
+    plt.close()
+
+print_statistics('statistics_MC', parameter_list_mc, 'epsilon')
+print_statistics('statistics_UCB', parameter_list_ucb, 'C')
+print_statistics('statistics_TD', parameter_list_td, '(step size, epsilon)')
+
