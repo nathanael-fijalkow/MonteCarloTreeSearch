@@ -10,4 +10,4 @@ All training is done using self-play (playing against itself).
 The State class is (heavily) inspired by Jeff Bradberry's own code (https://github.com/jbradberry).
 Little effort should make this code compatible with Jeff's implementations of some other games.
 
-Please find the Jupyer notebook [here](Reinforcement learning algorithms for Tic-Tac-Toe.ipynb)
+Please find the Jupyer notebook [here](RL_TTT.ipynb)
