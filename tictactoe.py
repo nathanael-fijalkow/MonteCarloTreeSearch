@@ -333,12 +333,10 @@ class Player_MC(Player):
         # Approximates the values through Monte Carlo simulation.
         if verbose:
             print("Start training of Player %s" % self.name)
-        t = 1
-        while t <= number_simulations:
+        for t in range(1,number_simulations+1):
             self.run_simulation()
             if verbose and t % 100 == 0:
                 print("After %d iterations the value of the initial state is %0.5f" % (t, (self.values_normalised[0] / self.plays[0])))
-            t += 1
 
         # Update the values.
         for hash_val in self.plays:
@@ -413,12 +411,10 @@ class Player_UCB(Player):
         # Approximates the values through Monte Carlo simulation.
         if verbose:
             print("Start training of Player %s" % self.name)
-        t = 1
-        while t <= number_simulations:
+        for t in range(1,number_simulations+1):
             self.run_simulation()
             if verbose and t % 100 == 0:
                 print("After %d iterations the value of the initial state is %0.5f" % (t, self.values_normalised[0] / self.plays[0]))
-            t += 1
 
         # Update the values.
         for hash_val in self.plays:
@@ -484,12 +480,10 @@ class Player_TD(Player):
         # Approximates the values through Temporal Difference.
         if verbose:
             print("Start training of Player %s" % self.name)
-        t = 1
-        while t <= number_simulations:
+        for t in range(1,number_simulations+1):
             self.run_simulation(t)
             if verbose and t % 500 == 0:
                 print("After %d iterations the value of the initial state is %0.5f" % (t, self.values[0]))
-            t += 1
 
 ###################################
 # TESTS
