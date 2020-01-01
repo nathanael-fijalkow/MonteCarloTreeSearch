@@ -11,3 +11,5 @@ The State class is (heavily) inspired by Jeff Bradberry's own code (https://gith
 Little effort should make this code compatible with Jeff's implementations of some other games.
 
 Please find the Jupyer notebook [here](RL_TTT.ipynb)
+
+Please find a description of the Monte Carlo algorithm on this [blog post](https://games-automata-play.github.io/blog/monte_carlo_tree_search/) of mine.
