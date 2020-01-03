@@ -219,7 +219,12 @@ class Competition(object):
     def ensures_tie(self, player1, player2, games = 50, player_of_interest = 1):
         i = 0
         while i < games:
-            if self.play(player1,player2) == player_of_interest - 1:
+            # If the player of interest loses, stop
+            # Reminder:
+            # If Player 1 loses the outcome is 0
+            # If Player 2 loses the outcome is 1
+            outcome,_,_ = self.play(player1,player2, verbose=False, player_of_interest=player_of_interest)
+            if outcome == player_of_interest - 1:
                 return i
             i += 1
         return games
@@ -230,7 +235,7 @@ class Competition(object):
 
 class Player():
     def __init__(self, name = 'Anonymous', strategy ='epsilon-greedy', update_mode = 'average',
-                 epsilon = 0.25, UCB = 2, step_size = 0.1, exponent = 0):
+                 epsilon = 0.25, UCB = 2, step_size = 0.1):
         self.values = dict()
         self.name = name
         # @plays counts for each state how many plays included this state
@@ -246,7 +251,6 @@ class Player():
         self.epsilon = epsilon
         self.UCB = UCB
         self.step_size = step_size
-        self.exponent = exponent
 
     # Takes the state and returns the move to be applied
     def play(self, state, verbose = False):
@@ -297,20 +301,21 @@ class Player():
                 self.values[state.hash] = current_val
 
     # During training, takes the current state and returns the move to be applied
-    # The boolean says whether the move was chosen greedily or uniformly at random
+    # The boolean says whether the move was chosen greedily (True) or uniformly at random (False)
     def play_during_training(self, state, t):
         possible_states = [((i, j), state.update_hash(i, j)) for (i, j) in state.legal_plays()]
         # If we have seen all of the legal moves at least once
         if all(hash_val in self.plays for ((i, j), hash_val) in possible_states):
             if self.strategy == 'epsilon-greedy':
             # Play the epsilon-greedy strategy
-                if random.random() < self.epsilon / (t ** self.exponent):
-                    return (False,random.choice(state.legal_plays()))
+                if random.random() < self.epsilon:
+                    return False,random.choice(state.legal_plays())
                 else:
                     if state.player == 1:
                         _, (i, j) = max((self.values[hash_val], (i, j)) for ((i, j), hash_val) in possible_states)
                     else:
                         _, (i, j) = min((self.values[hash_val], (i, j)) for ((i, j), hash_val) in possible_states)
+
             if self.strategy == 'UCB':
             # Play the UCB strategy
                 if state.player == 1:
@@ -323,13 +328,13 @@ class Player():
                         (self.values[hash_val] -
                          self.UCB * sqrt(log(self.plays[state.hash]) / self.plays[hash_val]), (i, j))
                         for ((i, j), hash_val) in possible_states)
-            return (True, (i, j))
+            return True, (i, j)
         else:
         # Otherwise choose randomly among unevaluated moves
             unevaluated_moves = [(i, j) for (i, j) in state.legal_plays() if
                                  not state.update_hash(i,j) in self.plays]
             (i, j) = random.choice(unevaluated_moves)
-            return (True, (i, j))
+            return True, (i, j)
 
     def store_new_state(self, state):
         if not(state.hash in self.plays):
@@ -374,12 +379,12 @@ class Player():
                     self.values[hash_val] += self.step_size * td_error
                 next_hash_val = hash_val
 
-    def train(self, number_simulations, verbose = False, tick = 100):
+    def train(self, number_simulations, verbose = False, steps = 100):
         if verbose:
             print("\nStart training of Player %s" % self.name)
         for t in range(1,number_simulations+1):
             self.run_simulation(t)
-            if verbose and t % tick == 0:
+            if verbose and t % steps == 0:
                 print("After %d iterations the value of the initial state is %0.5f" % (t, self.values[0]))
 
 ###################################
@@ -408,9 +413,9 @@ player_UCB_average = Player(name='UCB average sample', strategy='UCB', update_mo
 player_UCB_step_size = Player(name='UCB step size', strategy='UCB', update_mode='step_size')
 player_UCB_td = Player(name='UCB TD', strategy='UCB', update_mode='TD')
 
-player_eps_td.train(10000, True, tick = 1000)
-competition.compete(player_eps_td,player_optimal, count_optimal=True)
-competition.compete(player_optimal, player_eps_td, count_optimal=True, player_of_interest=2)
+#player_eps_td.train(10000, True, steps = 1000)
+#competition.compete(player_eps_td,player_optimal, count_optimal=True)
+#competition.compete(player_optimal, player_eps_td, count_optimal=True, player_of_interest=2)
 #competition.play(player_eps_td,player_optimal,verbose=True)
 
 ################################################
@@ -425,14 +430,14 @@ competition.compete(player_optimal, player_eps_td, count_optimal=True, player_of
 
 def how_many_iterations(player,steps = 100, games = 500, verbose = False, player_of_interest = 1):
     if verbose:
-        print("Player %s: how many iterations to win when playing %s" % (player.name, "first" if player_of_interest == 1 else "second"))
+        print("\nPlayer %s: how many iterations to win when playing %s" % (player.name, "first" if player_of_interest == 1 else "second"))
     iteration = 0
     while(True):
         player.train(steps)
         iteration += steps
         if player_of_interest == 1:
             result = competition.ensures_tie(player,player_optimal,games,player_of_interest)
-        else:
+        if player_of_interest == 2:
             result = competition.ensures_tie(player_optimal,player,games,player_of_interest)
         if result == games:
             if verbose:
@@ -444,11 +449,11 @@ def how_many_iterations(player,steps = 100, games = 500, verbose = False, player
 
 #how_many_iterations(player_eps_average, steps = 1000, games = 100, verbose = True, player_of_interest = 2)
 #how_many_iterations(player_eps_step_size, steps = 1000, games = 100, verbose = True, player_of_interest = 2)
-#how_many_iterations(player_eps_td, steps = 1000, games = 100, verbose = True, player_of_interest = 2)
+how_many_iterations(player_eps_td, steps = 1000, games = 100, verbose = True, player_of_interest = 2)
 
 #how_many_iterations(player_UCB_average, steps = 1000, games = 100, verbose = True, player_of_interest = 1)
 #how_many_iterations(player_UCB_step_size, steps = 1000, games = 100, verbose = True, player_of_interest = 1)
-#how_many_iterations(player_UCB_td, steps = 1000, games = 100, verbose = True, player_of_interest = 1)
+how_many_iterations(player_UCB_td, steps = 1000, games = 100, verbose = True, player_of_interest = 2)
 
 ################################################
 # Parameter tuning 
