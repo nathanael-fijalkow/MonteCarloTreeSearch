@@ -77,7 +77,10 @@ class State(object):
     # Prints the board
     def print_state(self):
         for i in range(0, SIZE):
-            print('-------------')
+            out = '-'
+            for _ in range(0, SIZE):
+                out += '----'
+            print(out)
             out = '| '
             for j in range(0, SIZE):
                 if self.data[i, j] == 1:
@@ -88,7 +91,10 @@ class State(object):
                     token = ' '
                 out += token + ' | '
             print(out)
-        print('-------------')
+        out = ''
+        for _ in range(0, SIZE):
+            out += '----'
+        print(out)
 
     # Takes a state and returns the full list of moves that are legal moves
     def legal_plays(self):
@@ -142,7 +148,8 @@ class Competition(object):
             player.values = pickle.load(f)
 
     # Takes two strategies (one for each player), play them against each other once and declare an outcome
-    def play(self, player1, player2, verbose=False, player_of_interest = 1):
+    # if player_of_interest is 1 or 2, it assumes that the other player is optimal
+    def play(self, player1, player2, verbose=False, player_of_interest = 0):
         state = State()
         state.hash = 0
 
@@ -192,8 +199,8 @@ class Competition(object):
         return state.outcome,count_opt,play_length
 
     # Takes two strategies (one for each player) and play them against each other for a number of games
-    # The count_optimal option only makes sense when playing against the optimal player
-    def compete(self, player1, player2, games = 500, count_optimal = False, player_of_interest = 1):
+    # if player_of_interest is 1 or 2, it assumes that the other player is optimal
+    def compete(self, player1, player2, games = 500, player_of_interest = 0):
         player1_win = 0.0
         player2_win = 0.0
         count_opt_tot = 0
@@ -210,7 +217,7 @@ class Competition(object):
         print("\nCompetition of Player %s (as Player 1) against Player %s (as Player 2):"
               "\n %d plays, Player 1 wins %.02f, Player 2 wins %.02f"
               % (player1.name, player2.name, games, player1_win / games, player2_win / games))
-        if count_optimal:
+        if player_of_interest:
             print("Player %s played optimal moves %0.2f percent of the time" %
                   (player1.name if player_of_interest == 1 else player2.name,
                    count_opt_tot / count_length_tot * 100))
@@ -223,7 +230,7 @@ class Competition(object):
             # Reminder:
             # If Player 1 loses the outcome is 0
             # If Player 2 loses the outcome is 1
-            outcome,_,_ = self.play(player1,player2, verbose=False, player_of_interest=player_of_interest)
+            outcome,_,_ = self.play(player1,player2, verbose=False)
             if outcome == player_of_interest - 1:
                 return i
             i += 1
@@ -235,7 +242,7 @@ class Competition(object):
 
 class Player():
     def __init__(self, name = 'Anonymous', strategy ='epsilon-greedy', update_mode = 'average',
-                 epsilon = 0.25, UCB = 2, step_size = 0.1):
+                 epsilon = 0.2, UCB = 1.5, step_size = 0.1):
         self.values = dict()
         self.name = name
         # @plays counts for each state how many plays included this state
@@ -280,6 +287,7 @@ class Player():
 
     # Computes the (exact) values recursively
     def solve(self, state = State()):
+        print(len(self.values))
         if state.compute_outcome() != -1:
             self.values[state.hash] = state.outcome
         else:
@@ -309,7 +317,7 @@ class Player():
             if self.strategy == 'epsilon-greedy':
             # Play the epsilon-greedy strategy
                 if random.random() < self.epsilon:
-                    return False,random.choice(state.legal_plays())
+                    return random.choice(state.legal_plays())
                 else:
                     if state.player == 1:
                         _, (i, j) = max((self.values[hash_val], (i, j)) for ((i, j), hash_val) in possible_states)
@@ -328,13 +336,13 @@ class Player():
                         (self.values[hash_val] -
                          self.UCB * sqrt(log(self.plays[state.hash]) / self.plays[hash_val]), (i, j))
                         for ((i, j), hash_val) in possible_states)
-            return True, (i, j)
+            return i, j
         else:
         # Otherwise choose randomly among unevaluated moves
             unevaluated_moves = [(i, j) for (i, j) in state.legal_plays() if
                                  not state.update_hash(i,j) in self.plays]
             (i, j) = random.choice(unevaluated_moves)
-            return True, (i, j)
+            return i, j
 
     def store_new_state(self, state):
         if not(state.hash in self.plays):
@@ -351,8 +359,8 @@ class Player():
         play = []
 
         while state.compute_outcome() == -1:
-            greedy, (i, j) = self.play_during_training(state,t)
-            play.append((greedy,state.hash))
+            (i, j) = self.play_during_training(state,t)
+            play.append(state.hash)
             state.update_state(i, j)
             self.store_new_state(state)
             self.plays[state.hash] += 1
@@ -360,23 +368,22 @@ class Player():
         if self.update_mode == 'average':
             # Update using average
             self.values[state.hash] = state.outcome
-            for _,hash_val in play:
+            for hash_val in play:
                 self.values[hash_val] += 1.0 / self.plays[state.hash] * (state.outcome - self.values[hash_val])
 
         if self.update_mode == 'step_size':
             # Update using step size
             self.values[state.hash] = state.outcome
-            for _,hash_val in play:
+            for hash_val in play:
                 self.values[hash_val] += self.step_size * (state.outcome - self.values[hash_val])
 
         if self.update_mode == 'TD':
             # Update using temporal difference (TD)
             next_hash_val = state.hash
             self.values[next_hash_val] = state.outcome
-            for greedy,hash_val in reversed(play):
-                if greedy:
-                    td_error = self.values[next_hash_val] - self.values[hash_val]
-                    self.values[hash_val] += self.step_size * td_error
+            for hash_val in reversed(play):
+                td_error = self.values[next_hash_val] - self.values[hash_val]
+                self.values[hash_val] += self.step_size * td_error
                 next_hash_val = hash_val
 
     def train(self, number_simulations, verbose = False, steps = 100):
@@ -401,22 +408,30 @@ def unhash(hash_val):
 competition = Competition()
 
 player_optimal = Player(name = "Optimal")
-player_optimal.solve()
+#player_optimal.solve()
 #competition.save_values("optimal", player_optimal)
 competition.load_values("optimal", player_optimal)
 
 player_eps_average = Player(name='epsilon-greedy average sample', strategy='epsilon-greedy', update_mode='average')
 player_eps_step_size = Player(name='epsilon-greedy step size', strategy='epsilon-greedy', update_mode='step_size')
-player_eps_td = Player(name='epsilon-greedy TD', strategy='epsilon-greedy', update_mode='TD')
+player_eps_td = Player(name='epsilon-greedy TD', strategy='epsilon-greedy', update_mode='TD', step_size=0.5)
 
 player_UCB_average = Player(name='UCB average sample', strategy='UCB', update_mode='average')
 player_UCB_step_size = Player(name='UCB step size', strategy='UCB', update_mode='step_size')
-player_UCB_td = Player(name='UCB TD', strategy='UCB', update_mode='TD')
+player_UCB_td = Player(name='UCB TD', strategy='UCB', update_mode='TD', step_size=0.5)
 
+# Test player_eps_td
 #player_eps_td.train(10000, True, steps = 1000)
-#competition.compete(player_eps_td,player_optimal, count_optimal=True)
-#competition.compete(player_optimal, player_eps_td, count_optimal=True, player_of_interest=2)
+#competition.compete(player_eps_td, player_optimal, player_of_interest=1)
+#competition.compete(player_optimal, player_eps_td, player_of_interest=2)
 #competition.play(player_eps_td,player_optimal,verbose=True)
+
+# Play player_eps_td against player_UCB_td
+#player_eps_td.train(10000, False)
+#player_UCB_td.train(10000, False)
+#competition.compete(player_eps_td,player_UCB_td)
+#competition.compete(player_UCB_td, player_eps_td)
+#competition.play(player_eps_td,player_UCB_td,verbose=True)
 
 ################################################
 # Print the number of reachable states
@@ -449,11 +464,11 @@ def how_many_iterations(player,steps = 100, games = 500, verbose = False, player
 
 #how_many_iterations(player_eps_average, steps = 1000, games = 100, verbose = True, player_of_interest = 2)
 #how_many_iterations(player_eps_step_size, steps = 1000, games = 100, verbose = True, player_of_interest = 2)
-how_many_iterations(player_eps_td, steps = 1000, games = 100, verbose = True, player_of_interest = 2)
+#how_many_iterations(player_eps_td, steps = 1000, games = 100, verbose = True, player_of_interest = 1)
 
 #how_many_iterations(player_UCB_average, steps = 1000, games = 100, verbose = True, player_of_interest = 1)
 #how_many_iterations(player_UCB_step_size, steps = 1000, games = 100, verbose = True, player_of_interest = 1)
-how_many_iterations(player_UCB_td, steps = 1000, games = 100, verbose = True, player_of_interest = 2)
+#how_many_iterations(player_UCB_td, steps = 1000, games = 100, verbose = True, player_of_interest = 2)
 
 ################################################
 # Parameter tuning 
@@ -463,8 +478,9 @@ import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 
-def run_statistics(strategy, update_mode, parameter_name, parameter_list, number_tests, steps, games):
+def statistics(strategy, update_mode, parameter_name, parameter_list, number_tests, steps, games):
     out = [[] for i in range(len(parameter_list))]
+    print("Statistics for the parameter %s" % parameter_name)
     for index,parameter in enumerate(parameter_list):
         print("parameter: %0.2f" % parameter)
         for i in tqdm(range(number_tests)):
@@ -472,28 +488,24 @@ def run_statistics(strategy, update_mode, parameter_name, parameter_list, number
                 player = Player(strategy=strategy, update_mode=update_mode, epsilon=parameter)
             if parameter_name == 'UCB':
                 player = Player(strategy=strategy, update_mode=update_mode, UCB=parameter)
-            if parameter_name == 'step_size':
+            if parameter_name == 'step size':
                 player = Player(strategy=strategy, update_mode=update_mode, step_size=parameter)
             out[index].append(how_many_iterations(player,steps,games,verbose=False))
-    with open('statistics_%s_%s.bin' % (strategy, update_mode), 'wb') as f:
+    with open('statistics_%s_%s_%s.bin' % (strategy, update_mode, parameter_name), 'wb') as f:
         pickle.dump(out, f)
-    return(out)
-
-parameter_list_ucb_td = range(20)
-#parameter_list_ucb_td = [1 + (i + 1) / 10 for i in range(10)]
-
-#run_statistics(strategy='UCB', update_mode='TD', parameter_name = 'epsilon', parameter_list = parameter_list_ucb_td,
-#               number_tests = 50, steps = 250, games = 50)
-
-def print_statistics(name_file, parameter_list, name_parameters):
-    with open('%s.bin' % name_file, 'rb') as f:
-        out = pickle.load(f)
     fig, ax = plt.subplots()
     ax.violinplot(out,parameter_list,widths=0.03)
-    ax.set_xlabel("Parameter: %s" %name_parameters)
+    ax.set_xlabel("Parameter: %s" %parameter_name)
     ax.set_ylabel("Number of iterations")
-    plt.savefig('%s.png' % name_file)
+    plt.savefig('statistics_%s_%s_%s.png' % (strategy, update_mode, parameter_name))
     plt.close()
 
-#print_statistics(name_file='statistics_UCB_TD', parameter_list=range(20),
-#                 name_parameters='UCB')
+parameter_list_eps_td = np.arange(0.05,0.55,step = 0.05)
+#statistics(strategy='epsilon-greedy', update_mode='TD', parameter_name = 'epsilon', parameter_list = parameter_list_eps_td, number_tests = 50, steps = 250, games = 50)
+
+parameter_list_ucb_td = [1 + (i + 1) / 10 for i in range(10)]
+#statistics(strategy='UCB', update_mode='TD', parameter_name = 'UCB', parameter_list = parameter_list_ucb_td, number_tests = 50, steps = 250, games = 50)
+
+parameter_list_eps_step_size = np.arange(0.05,0.3,step = 0.05)
+#statistics(strategy='epsilon-greedy', update_mode='TD', parameter_name = 'step size', parameter_list = parameter_list_eps_step_size, number_tests = 50, steps = 250, games = 50)
+
