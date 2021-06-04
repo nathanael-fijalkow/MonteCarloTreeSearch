@@ -1,15 +1,11 @@
 # TicTacToe_RL
-This repository contains simple and unoptimised implementations of some Reinforcement Learning algorithms for the game of Tic Tac Toe.
+This repository contains a clean, simple, and generic implementation of Monte Carlo Tree Search. 
 
-* Min-max
-* Monte Carlo (with epsilon-greedy strategies)
-* Upper Confidence Bound (UCB)
-* Temporal Difference (TD)
+For testing purposes it is applied to the game of Tic Tac Toe through a simple API
+which is (heavily) inspired by Jeff Bradberry's own code (https://github.com/jbradberry).
 
-All training is done using self-play (playing against itself).
-The State class is (heavily) inspired by Jeff Bradberry's own code (https://github.com/jbradberry).
-Little effort should make this code compatible with Jeff's implementations of some other games.
-
-Please find the Jupyer notebook [here](RL_TTT.ipynb)
-
-Please find a description of the Monte Carlo algorithm on this [blog post](https://games-automata-play.github.io/blog/monte_carlo_tree_search/) of mine.
+### Contents
+* tictactoe.py: the game of Tic Tac Toe
+* optimal.py: an optimal player (computing the value through min-max algorithm)
+* MCTS.py: the main file, generic implementation of MCTS. Can use epsilon-greedy or UCB as simulation strategy and average, step-size, or temporal difference for backpropagation
+* tests.py: a series of tests
