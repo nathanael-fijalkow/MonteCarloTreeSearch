@@ -1,4 +1,4 @@
-# TicTacToe_RL
+# MonteCarloTreeSearch
 This repository contains a clean, simple, and generic implementation of Monte Carlo Tree Search. 
 
 For testing purposes it is applied to the game of Tic Tac Toe through a simple API
